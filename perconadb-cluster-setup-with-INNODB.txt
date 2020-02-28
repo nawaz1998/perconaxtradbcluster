@@ -1,0 +1,141 @@
+-------------------------------------------------------------------
+STEP 1: INSTALL PERCONA CLUSTER
+-------------------------------------------------------------------
+install repo: 
+        #yum install https://repo.percona.com/yum/percona-release-latest.noarch.rpm
+
+package: 
+        #yum install Percona-XtraDB-Cluster-57
+
+-----------------------------------------------------
+START MYSQL SERVICE CHANGE PASSWORD AND STOP SERVICE
+-----------------------------------------------------
+# service mysql start
+# grep 'temporary password' /var/log/mysqld.log
+
+mysql> ALTER USER 'root'@'localhost' IDENTIFIED BY 'rootPass';
+Query OK, 0 rows affected (0.00 sec)
+
+mysql> exit
+Bye
+
+#service mysql stop
+
+-------------------------------------------------------------------
+STEP 2: CONFIGURE ALL NODES
+------------------------------------------------------------------- 
+file:  /etc/percona-xtradb-cluster.conf.d/wsrep.cnf
+
+-------------------------------------------------------------------
+1st NODE: change these PARAMETERS on 1st node
+-------------------------------------------------------------------
+#vi /etc/percona-xtradb-cluster.conf.d/wsrep.cnf
+
+[mysqld]
+wsrep_provider=/usr/lib64/galera3/libgalera_smm.so
+
+wsrep_cluster_name=pxc-cluster
+wsrep_cluster_address=gcomm://192.168.70.61,192.168.70.62,192.168.70.63
+
+wsrep_node_name=pxc1
+wsrep_node_address=192.168.70.61
+
+wsrep_sst_method=xtrabackup-v2
+wsrep_sst_auth=sstuser:passw0rd
+
+pxc_strict_mode=ENFORCING
+
+binlog_format=ROW
+default_storage_engine=InnoDB
+innodb_autoinc_lock_mode=2
+
+--------------------------------------------------------------------
+*) CREATE USER FOR CLUSTER
+--------------------------------------------------------------------
+mysql> CREATE USER 'sstuser'@'localhost' IDENTIFIED BY 'passw0rd';
+mysql> GRANT RELOAD, LOCK TABLES, PROCESS, REPLICATION CLIENT ON *.* TO 'sstuser'@'localhost';
+mysql> FLUSH PRIVILEGES;
+
+-----------------------------------------------------------------------
+STEP 3. BOOTSTRAPING THE FIRST NODE
+-----------------------------------------------------------------------
+On CENTOS 6:  
+        #/etc/init.d/mysql bootstrap-pxc 
+
+On CENTOS 7:
+        #systemctl start mysql@bootstrap.service
+
+------------------------------------------------------------------------
+[root@percona-node1 ~]# systemctl start mysql@bootstrap.service
+[root@percona-node1 ~]# mysql -uroot -p
+
+mysql> show status like 'wsrep%';
++----------------------------+--------------------------------------+
+| Variable_name              | Value                                |
++----------------------------+--------------------------------------+
+| wsrep_local_state_uuid     | c2883338-834d-11e2-0800-03c9c68e41ec |
+| ...                        | ...                                  |
+| wsrep_local_state          | 4                                    |
+| wsrep_local_state_comment  | Synced                               |
+| ...                        | ...                                  |
+| wsrep_cluster_size         | 1                                    |
+| wsrep_cluster_status       | Primary                              |
+| wsrep_connected            | ON                                   |
+| ...                        | ...                                  |
+| wsrep_ready                | ON                                   |
++----------------------------+--------------------------------------+
+40 rows in set (0.01 sec)
+
+--------------------------------------------------------------------------
+STEP 4. STARTING THE SECOND NODE
+--------------------------------------------------------------------------
+START OTHER MYSQL NODE NORMALLY eg: /etc/init.d/mysql start
+
+*** MAKE SURE TO VERIFY THESE CONFIGURATION LINES ON OTHER NODES ***
+
+wsrep_sst_auth=sstuser:passw0rd 
+wsrep_node_name=pxc2  {name of node 2}
+wsrep_node_address=192.168.70.71 {ip of node 2}
+
+--------------------------------------------------------------------------
+[root@percona-node2 ~]# /etc/init.d/mysql start
+
+if service start failed: verify configuration file for user authentication.
+
+--------------------------------------------------------------------------
+CHECK IF NODE IS A MEMBER OF CLUSTER
+-------------------------------------------
+mysql> show status like 'wsrep%';
++----------------------------+--------------------------------------+
+| Variable_name              | Value                                |
++----------------------------+--------------------------------------+
+| wsrep_local_state_uuid     | c2883338-834d-11e2-0800-03c9c68e41ec |
+| ...                        | ...                                  |
+| wsrep_local_state          | 4                                    |
+| wsrep_local_state_comment  | Synced                               |
+| ...                        | ...                                  |
+| wsrep_cluster_size         | 2                                    |
+| wsrep_cluster_status       | Primary                              |
+| wsrep_connected            | ON                                   |
+| ...                        | ...                                  |
+| wsrep_ready                | ON                                   |
++----------------------------+--------------------------------------+
+40 rows in set (0.01 sec)
+
+
+THE NODE WILL BE AUTOMATICALLY THE MEMBER OF THE CLUSTER
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
