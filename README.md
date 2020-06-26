@@ -1,2 +1,2 @@
 # perconaxtradbcluster
-Configuration of percomaextradbcluster
+Configuration of percona-xtradb-cluster
